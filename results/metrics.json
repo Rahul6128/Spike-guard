@@ -1,0 +1,85 @@
+{
+  "note": "Synthetic data, generator and detector by the same author. Not a real-world accuracy claim.",
+  "clear_attacks": {
+    "strength_range": [
+      0.85,
+      1.0
+    ],
+    "windows": 1800,
+    "attack_windows": 172,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "legit_flash_sales": 169,
+    "flash_sales_flagged": 0,
+    "per_attack": {
+      "card_testing": {
+        "windows": 51,
+        "caught": 51,
+        "right_label": 51,
+        "recall": 1.0
+      },
+      "velocity": {
+        "windows": 48,
+        "caught": 48,
+        "right_label": 48,
+        "recall": 1.0
+      },
+      "geo": {
+        "windows": 38,
+        "caught": 38,
+        "right_label": 38,
+        "recall": 1.0
+      },
+      "bust_out": {
+        "windows": 35,
+        "caught": 35,
+        "right_label": 35,
+        "recall": 1.0
+      }
+    }
+  },
+  "subtle_attacks": {
+    "strength_range": [
+      0.15,
+      0.6
+    ],
+    "windows": 1800,
+    "attack_windows": 188,
+    "precision": 1.0,
+    "recall": 0.904,
+    "f1": 0.95,
+    "false_positives": 0,
+    "false_negatives": 18,
+    "legit_flash_sales": 176,
+    "flash_sales_flagged": 0,
+    "per_attack": {
+      "card_testing": {
+        "windows": 41,
+        "caught": 36,
+        "right_label": 36,
+        "recall": 0.878
+      },
+      "velocity": {
+        "windows": 52,
+        "caught": 52,
+        "right_label": 52,
+        "recall": 1.0
+      },
+      "geo": {
+        "windows": 45,
+        "caught": 32,
+        "right_label": 32,
+        "recall": 0.711
+      },
+      "bust_out": {
+        "windows": 50,
+        "caught": 50,
+        "right_label": 50,
+        "recall": 1.0
+      }
+    }
+  }
+}

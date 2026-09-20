@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpikeGuard: merchant fraud spike radar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230D2233'/%3E%3Cpath d='M3 18h6l3-9 5 16 3-7h9' fill='none' stroke='%2334D1C7' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --mist:#EDF2F5; --paper:#FFFFFF; --ink:#0D2233; --muted:#51677A; --line:#D3DDE5;
+  --calm:#0B8A8C; --calm-soft:#DDF1F0; --spike:#D53F2A; --spike-soft:#FBE4DF;
+  --warn:#B97709; --warn-soft:#FBEFD6;
+  --head:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--mist);color:var(--ink);font:400 16px/1.55 var(--body);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid #1B6EF3;outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+/* top bar */
+.top{background:var(--ink);color:#fff}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:60px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand svg{flex:none}
+.brand b{font:700 20px/1 var(--head);letter-spacing:.01em}
+.brand span{color:#A9BCCB;font-size:14px}
+.sync{display:flex;align-items:center;gap:8px;font-size:14px;color:#CFDCE6}
+.dot{width:9px;height:9px;border-radius:50%;background:#34D1C7;box-shadow:0 0 0 0 rgba(52,209,199,.6);animation:beat 2.2s infinite}
+.sync.bad .dot{background:#F2B24A;animation:none}
+@keyframes beat{0%{box-shadow:0 0 0 0 rgba(52,209,199,.55)}70%{box-shadow:0 0 0 8px rgba(52,209,199,0)}100%{box-shadow:0 0 0 0 rgba(52,209,199,0)}}
+
+/* hero */
+.hero{background:var(--paper);border-bottom:1px solid var(--line)}
+.hero .wrap{padding-top:34px;padding-bottom:18px}
+h1{font:700 clamp(30px,4.6vw,52px)/1.05 var(--head);margin:0 0 10px;letter-spacing:-.015em;max-width:18ch}
+h1.alarm{color:var(--spike)}
+.sub{margin:0;color:var(--muted);max-width:62ch}
+.pulse-box{margin-top:22px}
+#pulse{display:block;width:100%;height:auto;overflow:visible}
+#pulse .g{stroke:var(--line);stroke-width:1}
+#pulse .thr{stroke:var(--spike);stroke-width:1;stroke-dasharray:5 5;opacity:.7}
+#pulse .lbl{fill:var(--muted);font:500 13px var(--body)}
+#pulse .hit{fill:var(--spike);font:600 13px var(--body)}
+#pulse .trace{fill:none;stroke:var(--calm);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+#pulse .trace.first{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.6s ease-out forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+#pulse .stem{stroke:var(--spike);stroke-width:1.5;opacity:.45}
+#pulse .peak{fill:var(--spike);stroke:#fff;stroke-width:2}
+.legend{display:flex;gap:20px;flex-wrap:wrap;color:var(--muted);font-size:14px;margin-top:6px}
+.legend i{display:inline-block;width:18px;height:3px;border-radius:2px;background:var(--calm);vertical-align:middle;margin-right:6px}
+.legend i.s{background:var(--spike)}
+
+/* layout */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:40px;padding:34px 0 20px}
+h2{font:700 24px/1.2 var(--head);margin:0 0 4px}
+.hint{margin:0 0 18px;color:var(--muted);font-size:15px}
+
+/* review queue */
+.alert{background:var(--paper);border:1px solid var(--line);border-left:6px solid var(--muted);padding:18px 20px;margin-bottom:14px}
+.alert.high{border-left-color:var(--spike)}
+.alert.medium{border-left-color:var(--warn)}
+.alert.low{border-left-color:var(--calm)}
+.alert.done{background:transparent;border-left-color:var(--line)}
+.a-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.alert h3{font:700 20px/1.25 var(--head);margin:0}
+.alert h3 small{font:400 16px var(--body);color:var(--muted)}
+.meta{margin:2px 0 0;color:var(--muted);font-size:14px}
+.chip{flex:none;font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--mist);color:var(--ink)}
+.chip.high{background:var(--spike-soft);color:#9A2818}
+.chip.medium{background:var(--warn-soft);color:#7A4E05}
+.chip.low{background:var(--calm-soft);color:#075E60}
+.why{margin:14px 0 4px;font-weight:600;font-size:14px}
+.alert ul{margin:0 0 12px;padding-left:20px}
+.alert li{margin:2px 0;max-width:75ch}
+.next{margin:0 0 14px;padding:10px 12px;background:var(--mist);font-size:15px;max-width:75ch}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{cursor:pointer;border:1px solid var(--ink);background:var(--paper);padding:9px 16px;border-radius:6px;font-weight:600;font-size:15px;min-height:42px}
+.btn:hover{background:var(--mist)}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.primary:hover{background:#1B3A52}
+.btn[disabled]{opacity:.5;cursor:progress}
+.empty{border:1px dashed #A9BAC7;padding:26px;color:var(--muted);background:rgba(255,255,255,.5)}
+details.reviewed{margin-top:22px}
+details.reviewed summary{cursor:pointer;font-weight:600;padding:6px 0}
+
+/* side rail */
+.facts{margin:0 0 34px;padding:0;list-style:none;border-top:2px solid var(--ink)}
+.facts li{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)}
+.facts span{color:var(--muted);font-size:15px}
+.facts b{font:700 22px/1 var(--head)}
+.facts em{display:block;font-style:normal;font-size:12.5px;color:var(--muted)}
+.try{background:var(--paper);border:1px solid var(--line);padding:20px}
+.try h2{font-size:20px}
+.pick{display:block;width:100%;margin:8px 0 14px;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);font:inherit;min-height:42px}
+.grp{margin:14px 0 6px;font-size:14px;font-weight:600;color:var(--muted)}
+.scn{display:grid;gap:8px}
+.scn button{text-align:left;cursor:pointer;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-height:56px}
+.scn button:hover{border-color:var(--ink)}
+.scn button[disabled]{opacity:.55;cursor:progress}
+.scn b{display:block;font-size:15px}
+.scn small{color:var(--muted);font-size:13px;line-height:1.3;display:block}
+.scn button.bad b{color:var(--spike)}
+.scn button.ok b{color:var(--calm)}
+.result{margin-top:14px;padding:12px 14px;font-size:15px;border-left:5px solid var(--muted);background:var(--mist)}
+.result.hit{border-left-color:var(--spike);background:var(--spike-soft)}
+.result.quiet{border-left-color:var(--calm);background:var(--calm-soft)}
+.result span{color:var(--muted);font-size:14px}
+.seed{margin-top:14px}
+.err{color:var(--spike);margin:8px 0 0;font-size:14px}
+
+/* footer */
+.stack{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 44px;color:var(--muted);font-size:14.5px}
+.stack ul{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0 14px;padding:0}
+.stack li{background:var(--paper);border:1px solid var(--line);padding:4px 12px;border-radius:999px;color:var(--ink);font-weight:500}
+.stack details{margin-top:10px}
+.stack summary{cursor:pointer;font-weight:600;color:var(--ink)}
+pre{background:var(--ink);color:#DDE8F0;padding:14px;border-radius:6px;overflow:auto;font-size:13px;line-height:1.5}
+
+@media (max-width:900px){
+  .cols{grid-template-columns:1fr;gap:28px}
+  .wrap{padding:0 16px}
+}
+@media (prefers-reduced-motion:reduce){
+  .dot{animation:none}
+  #pulse .trace.first{animation:none;stroke-dashoffset:0}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1B3A52"/><path d="M3 18h6l3-9 5 16 3-7h9" fill="none" stroke="#34D1C7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><b>SpikeGuard</b><br><span>Fraud spike radar for merchants</span></div>
+    </div>
+    <div class="sync" id="sync" role="status"><i class="dot"></i><span id="syncText">Connecting to AWS…</span></div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1 id="headline">Loading merchant traffic</h1>
+    <p class="sub" id="subline"></p>
+    <div class="pulse-box">
+      <svg id="pulse" viewBox="0 0 1000 250" role="img" aria-label="Traffic risk score for every 5-minute window across all merchants"></svg>
+      <div class="legend">
+        <span><i></i>Risk score of each 5-minute window, all merchants</span>
+        <span><i class="s"></i>Window flagged for review</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+  <div class="cols">
+    <section aria-labelledby="qh">
+      <h2 id="qh">Needs review</h2>
+      <p class="hint">SpikeGuard only flags. It never blocks a payment. Confirm what is real fraud and dismiss what is not.</p>
+      <div id="queue"></div>
+      <div id="reviewedBox"></div>
+    </section>
+
+    <aside>
+      <ul class="facts" id="facts"></ul>
+
+      <div class="try">
+        <h2>Try a scenario</h2>
+        <p class="hint" style="margin-bottom:0">Each button sends one 5-minute window of payments through the same pipeline real traffic uses.</p>
+        <label class="grp" for="merchant" style="display:block">Merchant</label>
+        <select id="merchant" class="pick"><option value="">Pick one at random</option></select>
+        <p class="grp">Attacks</p>
+        <div class="scn">
+          <button data-scn="card_testing" class="bad"><b>Card testing</b><small>Many tiny payments, mostly declined, from a few devices</small></button>
+          <button data-scn="velocity" class="bad"><b>Velocity attack</b><small>A sudden burst of payments from a handful of devices</small></button>
+          <button data-scn="geo" class="bad"><b>Geographic anomaly</b><small>Payments from regions this merchant has never sold to</small></button>
+          <button data-scn="bust_out" class="bad"><b>Bust-out</b><small>A few very large payments approved at once</small></button>
+        </div>
+        <p class="grp">Should stay quiet</p>
+        <div class="scn">
+          <button data-scn="flash_sale" class="ok"><b>Flash sale</b><small>Two to three times the usual volume from real customers</small></button>
+          <button data-scn="normal" class="ok"><b>Normal traffic</b><small>An ordinary five minutes</small></button>
+        </div>
+        <div id="result" class="result" hidden aria-live="polite"></div>
+        <p class="err" id="err" hidden></p>
+        <button class="btn seed" id="seed" hidden>Load one hour of demo traffic</button>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer class="stack">
+  <div class="wrap">
+    <strong style="color:var(--ink)">Running on AWS<span id="region"></span></strong>
+    <ul>
+      <li>API Gateway</li><li>Lambda</li><li>DynamoDB</li><li>SNS alerts</li><li>CloudWatch metrics</li>
+    </ul>
+    <p style="margin:0 0 6px;max-width:80ch">Demo traffic is synthetic. Numbers you see here are computed live from DynamoDB, and every alert you review updates them. Send your own payments with the ingest API.</p>
+    <details>
+      <summary>Send your own payments</summary>
+      <pre id="curl"></pre>
+    </details>
+  </div>
+</footer>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const rupees = (x) => "\u20b9" + Math.round(x || 0).toLocaleString("en-IN");
+const S = { last: null, sig: "", skew: 0, syncedAt: 0, drawn: false, reviewedOpen: false, busy: false };
+
+async function api(path, method, body) {
+  const res = await fetch(path, {
+    method: method || "GET",
+    headers: body ? {"Content-Type": "application/json"} : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* empty body */ }
+  if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ")");
+  return data;
+}
+
+function ago(ts) {
+  const secs = Math.max(0, Math.round(Date.now() / 1000 + S.skew - ts));
+  if (secs < 45) return "just now";
+  if (secs < 3600) return Math.round(secs / 60) + " min ago";
+  return Math.round(secs / 3600) + " h ago";
+}
+
+function hhmm(ts) {
+  return new Date(ts * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+}
+
+/* ---------- pulse trace ---------- */
+function renderPulse(windows, thr) {
+  const svg = $("#pulse");
+  const W = 1000, H = 250, L = 8, R = 8, T = 66, B = 30;
+  const y = (v) => T + (1 - v) * (H - T - B);
+  let out = '<line class="g" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(0) + '" y2="' + y(0) + '"/>' +
+            '<line class="thr" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(thr) + '" y2="' + y(thr) + '"/>' +
+            '<text class="lbl" x="' + (L + 4) + '" y="' + (y(thr) - 7) + '">Review threshold ' + thr.toFixed(2) + '</text>';
+  const pts = windows.slice().sort((a, b) => a.ts - b.ts || (a.merchant_id < b.merchant_id ? -1 : 1)).slice(-90);
+  if (pts.length < 2) {
+    out += '<text class="lbl" x="' + (W / 2) + '" y="' + (H / 2 + 20) + '" text-anchor="middle">Waiting for traffic. Load demo data or send a window to the ingest API.</text>';
+    svg.innerHTML = out;
+    return;
+  }
+  const x = (i) => L + (i * (W - L - R)) / (pts.length - 1);
+  const d = pts.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p.score).toFixed(1)).join(" ");
+  out += '<path class="trace' + (S.drawn ? "" : " first") + '" pathLength="1" d="' + d + '"/>';
+  const placed = [];
+  pts.forEach((p, i) => {
+    if (!p.flagged) return;
+    const cx = x(i), cy = y(p.score), width = p.pattern_label.length * 7.6;
+    const anchor = cx > W - width / 2 - 10 ? "end" : (cx < width / 2 + 10 ? "start" : "middle");
+    const x0 = anchor === "end" ? cx - width : (anchor === "start" ? cx : cx - width / 2), x1 = x0 + width;
+    let row = 0;
+    while (row < 2 && placed.some((q) => q.row === row && x0 < q.x1 + 8 && x1 > q.x0 - 8)) row++;
+    placed.push({row: row, x0: x0, x1: x1});
+    const ly = 50 - row * 19;
+    out += '<line class="stem" x1="' + cx.toFixed(1) + '" x2="' + cx.toFixed(1) + '" y1="' + (ly + 5) + '" y2="' + y(0) + '"/>' +
+           '<circle class="peak" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="6"><title>' + esc(p.pattern_label) + " at " + esc(p.merchant_name) + ", score " + p.score.toFixed(2) + '</title></circle>' +
+           '<text class="hit" x="' + cx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor + '">' + esc(p.pattern_label) + '</text>';
+  });
+  out += '<text class="lbl" x="' + L + '" y="' + (H - 6) + '">' + hhmm(pts[0].ts) + '</text>' +
+         '<text class="lbl" x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + hhmm(pts[pts.length - 1].ts) + '</text>';
+  svg.innerHTML = out;
+  S.drawn = true;
+}
+
+/* ---------- review queue ---------- */
+function alertHtml(a) {
+  const done = a.status !== "open";
+  const badge = done
+    ? '<span class="chip">' + (a.status === "confirmed" ? "Confirmed as fraud" : "Dismissed as false alarm") + "</span>"
+    : '<span class="chip ' + esc(a.severity) + '">' + esc(a.severity.charAt(0).toUpperCase() + a.severity.slice(1)) + " severity</span>";
+  const reasons = (a.reasons || []).map((r) => "<li>" + esc(r) + "</li>").join("");
+  const body = done ? "" :
+    '<p class="why">Why it was flagged</p><ul>' + reasons + "</ul>" +
+    '<p class="next"><b>Suggested next step:</b> ' + esc(a.action) + "</p>" +
+    '<div class="actions">' +
+    '<button class="btn primary" data-id="' + esc(a.id) + '" data-act="confirm">Confirm fraud</button>' +
+    '<button class="btn" data-id="' + esc(a.id) + '" data-act="dismiss">Dismiss as false alarm</button></div>';
+  return '<article class="alert ' + (done ? "done" : esc(a.severity)) + '">' +
+    '<div class="a-head"><div><h3>' + esc(a.pattern_label) + ' <small>at ' + esc(a.merchant_name) + "</small></h3>" +
+    '<p class="meta">' + ago(a.ts) + " \u00b7 risk score " + Number(a.score).toFixed(2) + " \u00b7 " + rupees(a.exposure) + " approved in the window</p></div>" +
+    badge + "</div>" + body + "</article>";
+}
+
+function renderQueue(alerts) {
+  const open = alerts.filter((a) => a.status === "open");
+  const done = alerts.filter((a) => a.status !== "open");
+  $("#queue").innerHTML = open.length
+    ? open.map(alertHtml).join("")
+    : '<div class="empty">' + (S.last.stats.windows_scored
+        ? "Nothing waiting. Try an attack from the panel on the right and watch it land here."
+        : "No alerts yet.") + "</div>";
+  $("#reviewedBox").innerHTML = done.length
+    ? '<details class="reviewed"' + (S.reviewedOpen ? " open" : "") + "><summary>Reviewed (" + done.length + ")</summary>" + done.map(alertHtml).join("") + "</details>"
+    : "";
+}
+
+/* ---------- facts ---------- */
+function renderFacts(st) {
+  const prec = st.precision == null ? "\u2014" : Math.round(st.precision * 100) + "%";
+  const rows = [
+    ["Windows scored", st.windows_scored.toLocaleString("en-IN"), ""],
+    ["Alerts raised", st.alerts_raised, ""],
+    ["Confirmed as fraud", st.confirmed, ""],
+    ["Dismissed as false alarm", st.dismissed, ""],
+    ["Reviewer-confirmed precision", prec, "Confirmed \u00f7 (confirmed + dismissed)"],
+    ["Approved value in flagged windows", rupees(st.exposure), ""],
+  ];
+  $("#facts").innerHTML = rows.map((r) =>
+    "<li><span>" + esc(r[0]) + (r[2] ? "<em>" + esc(r[2]) + "</em>" : "") + "</span><b>" + esc(r[1]) + "</b></li>").join("");
+}
+
+/* ---------- headline ---------- */
+function renderHeadline(s) {
+  const st = s.stats;
+  const merchants = new Set(s.windows.map((w) => w.merchant_id)).size;
+  const h = $("#headline");
+  h.classList.toggle("alarm", st.alerts_open > 0);
+  if (!st.windows_scored) {
+    h.textContent = "No traffic yet";
+    $("#subline").textContent = "Load a demo hour of merchant traffic, or send your first window of payments to the ingest API.";
+  } else if (st.alerts_open > 0) {
+    h.textContent = st.alerts_open + (st.alerts_open === 1 ? " payment spike needs" : " payment spikes need") + " your review";
+    $("#subline").textContent = st.windows_scored.toLocaleString("en-IN") + " five-minute windows scored across " + merchants + " merchants. Nothing is blocked automatically. You decide.";
+  } else {
+    h.textContent = "All quiet right now";
+    $("#subline").textContent = st.windows_scored.toLocaleString("en-IN") + " five-minute windows scored across " + merchants + " merchants and nothing needs review.";
+  }
+  $("#seed").hidden = st.windows_scored > 0 ? true : false;
+}
+
+function render(s) {
+  S.last = s;
+  renderHeadline(s);
+  renderPulse(s.windows, s.threshold);
+  renderQueue(s.alerts);
+  renderFacts(s.stats);
+}
+
+/* ---------- sync loop ---------- */
+async function refresh(force) {
+  try {
+    const s = await api("/api/summary");
+    S.skew = s.server_time - Date.now() / 1000;
+    S.syncedAt = Date.now();
+    $("#sync").classList.remove("bad");
+    $("#syncText").textContent = "Live from DynamoDB \u00b7 synced just now";
+    if (s.region) $("#region").textContent = " in " + s.region;
+    const sig = JSON.stringify([s.stats, s.alerts, s.windows]);
+    if (!S.last) fillMerchants(s.merchants);
+    if (force || sig !== S.sig) { S.sig = sig; render(s); }
+  } catch (e) {
+    $("#sync").classList.add("bad");
+    $("#syncText").textContent = "Cannot reach AWS. Retrying\u2026";
+  }
+}
+
+function fillMerchants(list) {
+  const sel = $("#merchant");
+  list.forEach((m) => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.name; sel.appendChild(o); });
+}
+
+setInterval(() => {
+  if (!S.syncedAt) return;
+  const secs = Math.round((Date.now() - S.syncedAt) / 1000);
+  if (!$("#sync").classList.contains("bad")) $("#syncText").textContent = "Live from DynamoDB \u00b7 synced " + (secs < 2 ? "just now" : secs + "s ago");
+}, 1000);
+setInterval(() => { if (!S.busy) refresh(false); }, 6000);
+
+/* ---------- actions ---------- */
+function setBusy(on) {
+  S.busy = on;
+  document.querySelectorAll(".scn button, #seed, #queue .btn").forEach((b) => { b.disabled = on; });
+}
+
+function showError(msg) {
+  const e = $("#err"); e.hidden = !msg; e.textContent = msg || "";
+}
+
+function showResult(v) {
+  const el = $("#result");
+  el.hidden = false;
+  el.className = "result " + (v.flagged ? "hit" : "quiet");
+  el.innerHTML = (v.flagged
+    ? "<b>Flagged: " + esc(v.pattern_label) + "</b> at " + esc(v.merchant_name) + ". Risk score " + v.score.toFixed(2) + ". It is now in the review queue."
+    : "<b>Stayed quiet.</b> " + esc(v.note) + " Risk score " + v.score.toFixed(2) + ".") +
+    (v.warmed_up ? "<br><span>First run for this merchant: it learned normal traffic from 10 quiet windows.</span>" : "");
+}
+
+document.querySelector(".try").addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button[data-scn]");
+  if (!btn || S.busy) return;
+  showError("");
+  setBusy(true);
+  try {
+    const v = await api("/api/simulate", "POST", {scenario: btn.dataset.scn, merchant_id: $("#merchant").value || undefined});
+    showResult(v);
+    await refresh(true);
+  } catch (e) { showError(e.message); }
+  setBusy(false);
+});
+
+$("#seed").addEventListener("click", async () => {
+  if (S.busy) return;
+  showError("");
+  setBusy(true);
+  try { await api("/api/seed", "POST", {}); await refresh(true); } catch (e) { showError(e.message); }
+  setBusy(false);
+});
+
+$("#queue").addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn || S.busy) return;
+  showError("");
+  setBusy(true);
+  try {
+    await api("/api/alerts/" + encodeURIComponent(btn.dataset.id), "POST", {action: btn.dataset.act});
+    await refresh(true);
+  } catch (e) { showError(e.message); await refresh(true); }
+  setBusy(false);
+});
+
+$("#reviewedBox").addEventListener("toggle", (ev) => { S.reviewedOpen = ev.target.open; }, true);
+
+$("#curl").textContent =
+  "curl -X POST " + location.origin + "/api/ingest \\\n" +
+  "  -H 'Content-Type: application/json' \\\n" +
+  "  -d '{\"merchant_id\":\"my-shop\",\"merchant_name\":\"My Shop\",\"transactions\":[\n" +
+  "    {\"amount\":499,\"status\":\"approved\",\"device_id\":\"d1\",\"card_bin\":\"411111\",\"geo\":\"IN-Jaipur\"}\n" +
+  "  ]}'";
+
+refresh(true);
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SpikeGuard - serverless merchant fraud-spike radar.
+  API Gateway + Lambda + DynamoDB + SNS + CloudWatch.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: Optional. Email that receives spike alerts. AWS sends a confirmation link you must click.
+  IngestApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional. When set, POST /api/ingest requires this value in an x-api-key header.
+  FlagThreshold:
+    Type: String
+    Default: "0.65"
+    Description: Risk score (0 to 1) at or above which a window is flagged for review.
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 256
+    Timeout: 25
+
+Resources:
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: SpikeGuard alerts
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+      TopicArn: !Ref AlertTopic
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+
+  SpikeGuardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: SpikeGuard dashboard, ingest API and detection engine
+      Handler: app.handler
+      CodeUri: src/
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          TOPIC_ARN: !Ref AlertTopic
+          FLAG_THRESHOLD: !Ref FlagThreshold
+          INGEST_API_KEY: !Ref IngestApiKey
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Table
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertTopic.TopicName
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /
+            Method: GET
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /{proxy+}
+            Method: ANY
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${SpikeGuardFunction}"
+      RetentionInDays: 14
+
+Outputs:
+  DashboardUrl:
+    Description: Open this link. It is your live SpikeGuard dashboard.
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/"
+  TableName:
+    Value: !Ref Table
+  AlertTopicArn:
+    Value: !Ref AlertTopic

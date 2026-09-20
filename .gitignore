@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+packaged.yaml
+.pytest_cache/
