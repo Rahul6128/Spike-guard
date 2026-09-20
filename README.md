@@ -42,24 +42,6 @@ Browser / your payment system
   written as Embedded Metric Format log lines (no extra API calls, no extra cost).
 * Everything is one CloudFormation/SAM template: `template.yaml`.
 
-## Deploy (about 5 minutes, no installs)
-
-1. Sign in to the AWS Console and pick a Region (for example **Asia Pacific (Mumbai) ap-south-1**).
-2. Click the **CloudShell** icon (`>_`) in the top bar and wait for the prompt.
-3. In CloudShell choose **Actions > Upload file** and upload `spikeguard.zip`.
-4. Run:
-
-   ```bash
-   unzip spikeguard.zip && cd spikeguard
-   bash deploy.sh you@example.com     # your email is optional; leave it out to skip alert emails
-   ```
-
-5. When it finishes it prints your **dashboard URL**. Open it and click
-   **Load one hour of demo traffic**, then try the scenario buttons.
-6. If you gave an email, open the "AWS Notification - Subscription Confirmation" mail and confirm it.
-
-To remove everything later: `bash teardown.sh`.
-
 ## API
 
 | Method | Path | Purpose |
